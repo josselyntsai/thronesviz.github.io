@@ -51,19 +51,17 @@ var dataSource = 'data/thrones_characters.csv';
 
 d3.csv(dataSource, function (error, rows) {
 	data = rows;
-	console.log(data);
-	//processData(data);
 	processThrones(data);
 });
 
-var maxGamesToWeapons = 0,
-	maxWeaponsToGames = 0,
-	maxGamesToTopics = 0,
-	maxTopicsToGames = 0,
-	maxGameWeapons = 0,
-	maxGameSales = 0, 
-	minGameSales = undefined,
-	totalGames = 45;
+var maxCharsToDeath = 0,
+	maxDeathToChars = 0,
+	maxCharsToHouses = 0,
+	maxHousesToChars = 0,
+	maxCharDeath = 0,
+	maxCharAppear = 0, 
+	minCharAppear = undefined,
+	totalChars = 45;
 var gradientCounter = 0,
 	gameRatings = {},
 	gameRatingTypes = {}
@@ -75,15 +73,15 @@ var gradientCounter = 0,
 
 function processThrones(data){
 
-	var gameRootNode = {
+	var charRootNode = {
 		name: 'games',
 		children: []
 	}
-	var weaponRootNode = {
+	var deathRootNode = {
 		name: 'games',
 		children: []
 	}
-	var contentRootNode = {
+	var houseRootNode = {
 		name: 'games',
 		children: []
 	}
@@ -97,7 +95,7 @@ function processThrones(data){
 		topicNodes = [],
 		deathNodes = [];
 
-		for(var d = 0; d < totalGames; d++){
+		for(var d = 0; d < totalChars; d++){
 		games[ data[d]['name'] ] = {
 			name: data[d]['name'],
 			className: getClassName(data[d]['name']),
@@ -134,14 +132,14 @@ function processThrones(data){
 			}
 		}
 
-		if( minGameSales == undefined){
-			minGameSales = games[ data[d]['name'] ]['size']
-		} else if( minGameSales > games[ data[d]['name'] ]['size'] ){
-			minGameSales = games[ data[d]['name'] ]['size']
+		if( minCharAppear == undefined){
+			minCharAppear = games[ data[d]['name'] ]['size']
+		} else if( minCharAppear > games[ data[d]['name'] ]['size'] ){
+			minCharAppear = games[ data[d]['name'] ]['size']
 		}
 		
-		if( games[ data[d]['name'] ]['size'] > maxGameSales ){
-			maxGameSales = games[ data[d]['name'] ]['size'];
+		if( games[ data[d]['name'] ]['size'] > maxCharAppear ){
+			maxCharAppear = games[ data[d]['name'] ]['size'];
 		}
 		
 		
@@ -265,40 +263,40 @@ function processThrones(data){
 		}
 	}
 	for(var g in games){
-		gameRootNode.children.push(games[g])
-		if(games[g]['numTopics'] > maxGamesToTopics){
-			maxGamesToTopics = games[g]['numTopics'];
+		charRootNode.children.push(games[g])
+		if(games[g]['numTopics'] > maxCharsToHouses){
+			maxCharsToHouses = games[g]['numTopics'];
 		}
-		if(games[g]['numWeapons'] > maxGamesToWeapons){
-			maxGamesToWeapons = games[g]['numWeapons'];
+		if(games[g]['numWeapons'] > maxCharsToDeath){
+			maxCharsToDeath = games[g]['numWeapons'];
 		}
 		
 	}
 	for(var w in weapons){
-		weaponRootNode.children.push(weapons[w])
-		if(weapons[w]['numGames'] > maxWeaponsToGames){
-			maxWeaponsToGames = weapons[w]['numGames'];
+		deathRootNode.children.push(weapons[w])
+		if(weapons[w]['numGames'] > maxDeathToChars){
+			maxDeathToChars = weapons[w]['numGames'];
 		}
 	}
 	for(var t in topics){
-		contentRootNode.children.push(topics[t])
-		if(topics[t]['numGames'] > maxTopicsToGames){
-			maxTopicsToGames = topics[t]['numGames'];
+		houseRootNode.children.push(topics[t])
+		if(topics[t]['numGames'] > maxHousesToChars){
+			maxHousesToChars = topics[t]['numGames'];
 		}
 	}
 	
-	maxGameWeapons = maxGamesToWeapons
-	if( maxWeaponsToGames > maxGamesToWeapons){
-		maxGameWeapons = maxWeaponsToGames;
+	maxCharDeath = maxCharsToDeath
+	if( maxDeathToChars > maxCharsToDeath){
+		maxCharDeath = maxDeathToChars;
 	}
-	maxGameTopics = maxGamesToTopics
-	if( maxTopicsToGames > maxGameTopics){
-		maxGameTopics = maxTopicsToGames;
+	maxGameTopics = maxCharsToHouses
+	if( maxHousesToChars > maxGameTopics){
+		maxGameTopics = maxHousesToChars;
 	}
 		
-	map.children.push(gameRootNode);
-	map.children.push(weaponRootNode);
-	map.children.push(contentRootNode);
+	map.children.push(charRootNode);
+	map.children.push(deathRootNode);
+	map.children.push(houseRootNode);
 	
 	drawChart();
 	
@@ -317,7 +315,7 @@ function processThrones(data){
 		},
 		{
 			name: 'No guns',
-			total: totalGames - gamesWithGuns.length,
+			total: totalChars - gamesWithGuns.length,
 			contentType: 'guns',
 			data: gamesWithoutGuns
 		},
@@ -335,7 +333,7 @@ function processThrones(data){
 		},
 		{
 			name: 'Alive',
-			total: totalGames - gamesWithViolence.length,
+			total: totalChars - gamesWithViolence.length,
 			contentType: 'violence',
 			data: gamesWithoutViolence
 		},
@@ -506,7 +504,7 @@ function drawSmallChart(location, data, align, height){
 
                         })
                         .text(function(d) { 
-                                var text = Math.round(d.total/totalGames * 100).toFixed(0) + '%'
+                                var text = Math.round(d.total/totalChars * 100).toFixed(0) + '%'
                                 return text; 
                         
                         });
@@ -518,7 +516,7 @@ function drawSmallChart(location, data, align, height){
                 }
 
                 function barW(v){
-                        return v/totalGames * w;
+                        return v/totalChars * w;
                         
                 }
 }
@@ -544,7 +542,7 @@ function drawChart(){
 	    .range([0,50]);
 
 	var gameBarScale = d3.scale.linear()
-	    .domain([0,maxGameSales])
+	    .domain([0,maxCharAppear])
 	    .range([0,10]);
 	
 	
@@ -633,7 +631,7 @@ function drawChart(){
 
 
 	gameWeaponsScale = d3.scale.linear()
-	    				.domain([0,maxGameWeapons])
+	    				.domain([0,maxCharDeath])
 	    				.range([0,1]);
 	
 	
