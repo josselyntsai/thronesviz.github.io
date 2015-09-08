@@ -1,5 +1,5 @@
 # Visualizing Game of Thrones
-
+###View our live visualization here: http://thronesviz.github.io
 ##Data Collection
 Game of Thrones (GoT) is an American fantasy drama television series that is very popular
 nowadays. Using the BeautifulSoup package, a library to pull data out from HTML files, we
@@ -76,4 +76,4 @@ Game of Thrones), there is still a huge number of strong female characters. Desp
 outnumbered two to one, many of the top/most occurring characters are female.
 
 Lastly, we included some text around the graph and in the two widgets to balance the
-visualization aesthetically and provide some light hearted fun facts! And you can also see our live visualization here: http://thronesviz.github.io
+visualization aesthetically and provide some light hearted fun facts! 
