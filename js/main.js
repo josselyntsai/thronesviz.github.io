@@ -3,43 +3,40 @@ var map = {
 	 "children": []
 };
 
-var gwlinks = [],
-	gdlinks = [],
-	gtlinks = [];
+var chardeath_links = [],
+	charhouse_links = [];
 
 var diameter = 640,
     radius = 940 / 2,
     innerRadius = radius - 270,
-	circlew = 940;
-
+	circle = 940;
 
 var cluster = d3.layout.cluster()
     .size([360, innerRadius])
-	.sort(function(a, b) { 
-		
-		var valueA = a.size * 100
-		var valueB = b.size * 100
-		
-		var charA = a.name.toLowerCase().charCodeAt(0)
-		var charB = b.name.toLowerCase().charCodeAt(0)
-		
-		if(a.nodeType == 'game'){
+	.sort(function(a, b) {
+		var valueA = a.appear * 100;
+		var valueB = b.appear * 100;
+
+		var charA = a.name.toLowerCase().charCodeAt(0);
+		var charB = b.name.toLowerCase().charCodeAt(0);
+
+		if(a.nodeType == 'char'){
 			return d3.descending(valueA, valueB);
 		} else {
-			return d3.descending(valueB - charB, valueA - charA); 
+			return d3.descending(valueB - charB, valueA - charA);
 		}
 	})
-    .value(function(d) { return d.size; });
+    .value(function(d) { return d.appear; });
 
 var bundle = d3.layout.bundle();
 
-var svg = d3.select("#game-network").append("svg")
-    .attr("width", circlew)
+var svg = d3.select("#got-network").append("svg")
+    .attr("width", circle)
     .attr("height", diameter+240)
   .append("g")
-    .attr("transform", "translate(" + (radius + 75) + "," + (radius - 50) + ")")
+    .attr("transform", "translate(" + (radius + 75) + "," + (radius - 50) + ")");
 
-var svgDefs = svg.append("svg:defs")  
+var svgDefs = svg.append("svg:defs");
 
 var line = d3.svg.line.radial()
     .interpolate("bundle")
@@ -47,478 +44,470 @@ var line = d3.svg.line.radial()
     .radius(function(d) { return d.y; })
     .angle(function(d) { return d.x / 180 * Math.PI; });
 
-var dataSource = 'data/thrones_characters.csv';
+var dataSource = 'data/thrones_characters.csv';  // Cleaned GoT chars data
 
+var maxCharToDeath = 0,
+	maxDeathToChars = 0,
+	maxCharsToHouses = 0,
+	maxHousesToChars = 0,
+	maxCharDeath = 0,
+	maxCharAppear = 0,
+	minCharAppear = undefined,
+	totalChars = 45;  // Limit to 45 chars
+
+var gradientCounter = 0,
+	charStatus = {},
+	charAlive = [],
+	charDeceased = [],
+	charMale = [],
+	charFemale = [];
+
+// Main data processing
 d3.csv(dataSource, function (error, rows) {
 	data = rows;
 	processThrones(data);
 });
 
-var maxCharsToDeath = 0,
-	maxDeathToChars = 0,
-	maxCharsToHouses = 0,
-	maxHousesToChars = 0,
-	maxCharDeath = 0,
-	maxCharAppear = 0, 
-	minCharAppear = undefined,
-	totalChars = 45;
-var gradientCounter = 0,
-	gameRatings = {},
-	gameRatingTypes = {}
-	gamesWithViolence = [],
-	gamesWithoutViolence = [],
-	weaponTypes = {},
-	gamesWithGuns = [],
-	gamesWithoutGuns = []
-
+// Main function
 function processThrones(data){
 
 	var charRootNode = {
-		name: 'games',
+		name: 'chars',
 		children: []
 	}
 	var deathRootNode = {
-		name: 'games',
+		name: 'chars',
 		children: []
 	}
 	var houseRootNode = {
-		name: 'games',
+		name: 'chars',
 		children: []
 	}
 
-	var games = {},
+	var chars = {},
 		weapons = {},
-		topics = {},
-		death = {},
-		gameNodes = [],
-		weaponNodes = [],
-		topicNodes = [],
-		deathNodes = [];
+		houses = {},
+		death = {};
 
-		for(var d = 0; d < totalChars; d++){
-		games[ data[d]['name'] ] = {
+	var statusTags,
+		houseTags;
+
+	for(var d = 0; d < totalChars; d++){
+		chars[ data[d]['name'] ] = {
 			name: data[d]['name'],
 			className: getClassName(data[d]['name']),
 			children: [],
-			size: data[d]['appeared'],
-			numWeapons: 0,
+			appear: data[d]['appeared'],
+			numDeath: 0,
 			weapons: [],
-			topics: [],
-			numTopics: 0,
-			nodeType: 'game',
+			houses: [],
+			numHouse: 0,
+			nodeType: 'char',
 			image: data[d]['image'],
 			connectedNodes: [],
-			gameRating: data[d]['rating'],
+			charStatus: data[d]['status'],
 			seasons: data[d]['season'].split(','),
-			violenceLink: '',
-			weaponLink: '',
-			ratingLink: data[d]['rating'],
-			weaponConnections:{'guns': [], 'noguns': []},
-			topicConnections: {'deceased': [], 'alive': []},
+			deathLink: '',
+			genderLink: '',
+			houseConnections:{'male': [], 'female': []},
+			deathConnections: {'deceased': [], 'alive': []},
 			gender: data[d]['gender'],
 			portrayed: data[d]['portrayed'],
 			culture: data[d]['culture'],
 			religion: data[d]['religion']
 		}
-		
-		if(gameRatings.hasOwnProperty(data[d]['rating'])){
-			gameRatings[data[d]['rating']]['total'] ++
-			gameRatings[data[d]['rating']]['data'].push(games[ data[d]['name'] ])
+
+		statusTags = ( data[d]['houseallegiance'] != '' ) ? data[d]['houseallegiance'].split(', ') : [];
+		houseTags = ( data[d]['deathcause'] != '' ) ? data[d]['deathcause'].split(', ') : [];
+
+		if(charStatus.hasOwnProperty(data[d]['status'])){
+			charStatus[data[d]['status']]['total'] ++;
+			charStatus[data[d]['status']]['data'].push(chars[ data[d]['name'] ]);
+
 		} else {
-			gameRatings[data[d]['rating']] = {
-				name: data[d]['rating'],
+			charStatus[data[d]['status']] = {
+				name: data[d]['status'],
 				total: 1,
-				data: [ games[ data[d]['name'] ] ]
+				data: [ chars[ data[d]['name'] ] ]
 			}
 		}
 
 		if( minCharAppear == undefined){
-			minCharAppear = games[ data[d]['name'] ]['size']
-		} else if( minCharAppear > games[ data[d]['name'] ]['size'] ){
-			minCharAppear = games[ data[d]['name'] ]['size']
+			minCharAppear = chars[ data[d]['name'] ]['appear'];
+
+		} else if( minCharAppear > chars[ data[d]['name'] ]['appear'] ){
+			minCharAppear = chars[ data[d]['name'] ]['appear'];
 		}
-		
-		if( games[ data[d]['name'] ]['size'] > maxCharAppear ){
-			maxCharAppear = games[ data[d]['name'] ]['size'];
+
+		if( chars[ data[d]['name'] ]['appear'] > maxCharAppear ){
+			maxCharAppear = chars[ data[d]['name'] ]['appear'];
 		}
-		
-		
-		var weaponTags = ( data[d]['weapons'] != '') ? data[d]['weapons'].split(', '): [];
-		var contentTags = ( data[d]['contentdescripters'] != '' ) ? data[d]['contentdescripters'].split(', '): [];	
-		
-		
-		if( weaponTags.length > 0){
-			var includeGameWeapon = false;
-			games[ data[d]['name'] ]['numWeapons'] = weaponTags.length;
-			weaponTags.forEach(function(w){
+
+		if( statusTags.length > 0){
+			var includeCharDeath = false;
+			chars[ data[d]['name'] ]['numDeath'] = statusTags.length;
+			statusTags.forEach(function(w){
 
 				if( !weapons[ w ] ){
 					weapons[w] = {
 						name: w,
 						className: getClassName(w),
 						children: [],
-						size: 0,
-						numGames: 0,
-						games: [],
-						nodeType: 'weapon',
+						appear: 0,
+						numChars: 0,
+						chars: [],
+						nodeType: 'house',
 						connectedNodes: [],
 						barLinks : {},
-						weaponLink: ''						
+						genderLink: ''
 					}
 				}
 
-				gwlinks.push({
-					type: 'game-weapon-link',
-					source: games[ data[d]['name'] ],
+				chardeath_links.push({
+					type: 'char-death-link',
+					source: chars[ data[d]['name'] ],
 					target: weapons[w]
 				})
-				weapons[w]['size'] ++;
-				weapons[w]['numGames'] ++;
-				
-				weapons[w]['connectedNodes'].push(games[ data[d]['name'] ]['className']);
-				weapons[w]['games'].push(games[ data[d]['name'] ]['name']);
-				games[ data[d]['name'] ]['connectedNodes'].push(weapons[w]['className']);
-				games[ data[d]['name'] ]['weapons'].push(weapons[w]['name']);
-				
-				if(games[ data[d]['name'] ]['gender'] == 'm'){
-					includeGameWeapon = true
-					weapons[w]['weaponLink'] = weapons[w]['barLinks']['guns'] = 'guns'
-					games[ data[d]['name'] ]['weaponConnections']['guns'].push(weapons[w])
+
+				weapons[w]['appear'] ++;
+				weapons[w]['numChars'] ++;
+
+				weapons[w]['connectedNodes'].push(chars[ data[d]['name'] ]['className']);
+				weapons[w]['chars'].push(chars[ data[d]['name'] ]['name']);
+
+				chars[ data[d]['name'] ]['connectedNodes'].push(weapons[w]['className']);
+				chars[ data[d]['name'] ]['weapons'].push(weapons[w]['name']);
+
+				if(chars[ data[d]['name'] ]['gender'] == 'm'){
+					includeCharDeath = true
+					weapons[w]['genderLink'] = weapons[w]['barLinks']['male'] = 'male'
+					chars[ data[d]['name'] ]['houseConnections']['male'].push(weapons[w])
+
 				} else {
-					weapons[w]['weaponLink'] = weapons[w]['barLinks']['noguns'] = 'noguns'
-					games[ data[d]['name'] ]['weaponConnections']['noguns'].push(weapons[w])
+					weapons[w]['genderLink'] = weapons[w]['barLinks']['female'] = 'female'
+					chars[ data[d]['name'] ]['houseConnections']['female'].push(weapons[w])
 				}
-				
+
 			})
-	
-			if(includeGameWeapon){
-				gamesWithGuns.push(games[ data[d]['name'] ])
-				games[ data[d]['name'] ]['weaponLink'] = 'guns'
-	
+
+			if(includeCharDeath){
+				charMale.push(chars[ data[d]['name'] ]);
+				chars[ data[d]['name'] ]['genderLink'] = 'male';
+
 			} else {
-				gamesWithoutGuns.push(games[ data[d]['name'] ])
-				games[ data[d]['name'] ]['weaponLink']  = 'noguns'
+				charFemale.push(chars[ data[d]['name'] ]);
+				chars[ data[d]['name'] ]['genderLink']  = 'female';
 			}
-			
+
 		} else {
-			gamesWithoutGuns.push(games[ data[d]['name'] ])
-			games[ data[d]['name'] ]['weaponLink']  = 'noguns'
+			charFemale.push(chars[ data[d]['name'] ]);
+			chars[ data[d]['name'] ]['genderLink']  = 'female';
 		}
 
-		if( contentTags.length > 0){
-			var includeGameContent = false;
-			
-			games[ data[d]['name'] ]['numTopics'] = weaponTags.length;
-			contentTags.forEach(function(t){
-				
-				if( !topics[ t ] ){
-					topics[t] = {
-						name: t,
-						className: getClassName(t),
+		if( houseTags.length > 0){
+			var includeCharHouse = false;
+
+			chars[ data[d]['name'] ]['numHouses'] = statusTags.length;
+
+			houseTags.forEach(function(h){
+
+				if( !houses[h] ){
+					houses[h] = {
+						name: h,
+						className: getClassName(h),
 						children: [],
-						size: 0,
-						numGames: 0,
-						games: [],
-						nodeType: 'topic',
+						appear: 0,
+						numChars: 0,
+						chars: [],
+						nodeType: 'death',
 						connectedNodes: [],
 						barLinks: {},
-						violenceLink: ''
+						deathLink: ''
 					}
 				}
 
-				gtlinks.push({
-					type: 'game-topic-link',
-					source: games[ data[d]['name'] ],
-					target: topics[t]
+				charhouse_links.push({
+					type: 'char-house-link',
+					source: chars[ data[d]['name'] ],
+					target: houses[h]
 				})
-				topics[t]['size'] ++;
-				topics[t]['numGames'] ++;
-				
-				topics[t]['connectedNodes'].push(games[ data[d]['name'] ]['className']);
-				topics[t]['games'].push(games[ data[d]['name'] ]['name']);
-				games[ data[d]['name'] ]['connectedNodes'].push(topics[t]['className']);		
-				games[ data[d]['name'] ]['topics'].push(topics[t]['name']);
-				
-				if(games[ data[d]['name'] ]['gameRating'] == 'Deceased'){
-					includeGameContent = true;
-					topics[t]['violenceLink'] = topics[t]['barLinks']['violence'] = 'violence'
-					games[ data[d]['name'] ]['topicConnections']['deceased'].push(topics[t]);
+
+				houses[h]['appear'] ++;
+				houses[h]['numChars'] ++;
+
+				houses[h]['connectedNodes'].push(chars[ data[d]['name'] ]['className']);
+				houses[h]['chars'].push(chars[ data[d]['name'] ]['name']);
+
+				chars[ data[d]['name'] ]['connectedNodes'].push(houses[h]['className']);
+				chars[ data[d]['name'] ]['houses'].push(houses[h]['name']);
+
+				if(chars[ data[d]['name'] ]['charStatus'] == 'Deceased'){
+					includeCharHouse = true;
+					houses[h]['deathLink'] = houses[h]['barLinks']['death'] = 'violence';
+					chars[ data[d]['name'] ]['deathConnections']['deceased'].push(houses[h]);
+
 				} else {
-					topics[t]['violenceLink'] = topics[t]['barLinks']['violence'] = 'noviolence'
-					games[ data[d]['name'] ]['topicConnections']['alive'].push(topics[t])
+					houses[h]['deathLink'] = houses[h]['barLinks']['death'] = 'noviolence';
+					chars[ data[d]['name'] ]['deathConnections']['alive'].push(houses[h]);
 				}
-				
+
 			})
-			if(includeGameContent){
-				gamesWithViolence.push(games[ data[d]['name'] ]);
-				games[ data[d]['name'] ]['violenceLink'] = 'deceased';
-				
+
+			if(includeCharHouse){
+				charAlive.push(chars[ data[d]['name'] ]);
+				chars[ data[d]['name'] ]['deathLink'] = 'deceased';
+
 			} else {
-				gamesWithoutViolence.push(games[ data[d]['name'] ]);
-				games[ data[d]['name'] ]['violenceLink'] = 'alive';
+				charDeceased.push(chars[ data[d]['name'] ]);
+				chars[ data[d]['name'] ]['deathLink'] = 'alive';
 			}
-			
+
 		} else {
-			games[ data[d]['name'] ]['violenceLink'] = 'alive';
+			chars[ data[d]['name'] ]['deathLink'] = 'alive';
 		}
 	}
-	for(var g in games){
-		charRootNode.children.push(games[g])
-		if(games[g]['numTopics'] > maxCharsToHouses){
-			maxCharsToHouses = games[g]['numTopics'];
+
+	for(var c in chars){
+		charRootNode.children.push(chars[c]);
+
+		if(chars[c]['numHouses'] > maxCharsToHouses){
+			maxCharsToHouses = chars[c]['numHouses'];
 		}
-		if(games[g]['numWeapons'] > maxCharsToDeath){
-			maxCharsToDeath = games[g]['numWeapons'];
+
+		if(chars[c]['numDeath'] > maxCharToDeath){
+			maxCharToDeath = chars[c]['numDeath'];
 		}
-		
+
 	}
+
 	for(var w in weapons){
-		deathRootNode.children.push(weapons[w])
-		if(weapons[w]['numGames'] > maxDeathToChars){
-			maxDeathToChars = weapons[w]['numGames'];
+		deathRootNode.children.push(weapons[w]);
+
+		if(weapons[w]['numChars'] > maxDeathToChars){
+			maxDeathToChars = weapons[w]['numChars'];
 		}
 	}
-	for(var t in topics){
-		houseRootNode.children.push(topics[t])
-		if(topics[t]['numGames'] > maxHousesToChars){
-			maxHousesToChars = topics[t]['numGames'];
+
+	for(var h in houses){
+		houseRootNode.children.push(houses[h]);
+
+		if(houses[h]['numChars'] > maxHousesToChars){
+			maxHousesToChars = houses[h]['numChars'];
 		}
 	}
-	
-	maxCharDeath = maxCharsToDeath
-	if( maxDeathToChars > maxCharsToDeath){
+
+	maxCharDeath = maxCharToDeath;
+	if( maxDeathToChars > maxCharToDeath){
 		maxCharDeath = maxDeathToChars;
 	}
-	maxGameTopics = maxCharsToHouses
-	if( maxHousesToChars > maxGameTopics){
-		maxGameTopics = maxHousesToChars;
+
+	maxCharHouses = maxCharsToHouses;
+	if( maxHousesToChars > maxCharHouses){
+		maxCharHouses = maxHousesToChars;
 	}
-		
+
 	map.children.push(charRootNode);
 	map.children.push(deathRootNode);
 	map.children.push(houseRootNode);
-	
+
 	drawChart();
-	
-	var ratingArray = []
-	for(var k in gameRatings){
-		gameRatings[k].contentType = 'rating'
-		//ratingArray.push(gameRatings[k])
+
+	var statusArray = []
+	for(var k in charStatus){
+		charStatus[k].contentType = 'status';
 	}
-	
-	var gameGunsArray = [
+
+	var genderArray = [
 		{
-			name: 'Guns',
-			total: gamesWithGuns.length,
-			contentType: 'guns',
-			data: gamesWithGuns
+			name: 'Male',
+			total: charMale.length,
+			contentType: 'house',
+			data: charMale
 		},
 		{
-			name: 'No guns',
-			total: totalChars - gamesWithGuns.length,
-			contentType: 'guns',
-			data: gamesWithoutGuns
+			name: 'Female',
+			total: totalChars - charMale.length,
+			contentType: 'house',
+			data: charFemale
 		},
-	
+
 	];
 
-	drawSmallChart('chart-game-weapons', gameGunsArray, 'left', 60);
-	
-	var gameViolenceArray = [
+	drawSmallChart('chart-char-gender', genderArray, 'left', 60);
+
+	var deathArray = [
 		{
 			name: 'Deceased',
-			total: gamesWithViolence.length,
-			contentType: 'violence',
-			data: gamesWithViolence
+			total: charAlive.length,
+			contentType: 'death',
+			data: charAlive
 		},
 		{
 			name: 'Alive',
-			total: totalChars - gamesWithViolence.length,
-			contentType: 'violence',
-			data: gamesWithoutViolence
-		},
-	
+			total: totalChars - charAlive.length,
+			contentType: 'death',
+			data: charDeceased
+		}
 	]
-	drawSmallChart('chart-game-violence', gameViolenceArray, 'left', 60);
 
-	$('.gia-button').click(function(e){
-		if($(this).hasClass('gia-button-selected') == false){	
+	drawSmallChart('chart-char-death', deathArray, 'left', 60);
+
+	$('.got-button').click(function(e){
+		if($(this).hasClass('got-button-selected') == false){
 			currentSelectionText = $(this).text();
-			$(this).text('Show all characters')	
+			$(this).text('Show all characters')
 			currentSelectionBtn = this;
-						
-			if($(this).attr('id') == 'btn-guns'){
-				showBarConnections( gameGunsArray['0']);
 
-			} else if($(this).attr('id') == 'btn-violence'){
-				showBarConnections( gameViolenceArray['0'])
-			} else if($(this).attr('id') == 'btn-audience'){
-				showBarConnections( ratingArray[0])
+			if($(this).attr('id') == 'btn-gender'){
+				showBarConnections( genderArray['0']);
+
+			} else if($(this).attr('id') == 'btn-death'){
+				showBarConnections( deathArray['0'])
 			}
 
 		} else {
-			hideBarConnections(currentSelection )
+			hideBarConnections( currentSelection );
 		}
 
 	})
 }
 
-var smallVis = {}
+var smallVis = {};
 
-function drawSmallChart(location, data, align, height){      
-        var h = height,
-                w = 200,
-                barH = 25;
-        
-        var startX = 0
-        var startY = 1
-        smallVis [data[0]['contentType']] = vis = d3.select("#" + location).append('svg')
-                .attr({
-                        'height': h + 'px',
-                        'width': w + 'px'
-                })
-        
-        w = 150;
-        var bars = vis.selectAll(".bar")  
-                .data(data)
-                .enter()
-                        .append('g')
-                        .attr('class', 'bar-group')
-                        .attr('id', function(d){
-                                return 'bargroup-' + d.name.toLowerCase().replace(' ', '')
-                        })
-                        
-                        bars.append('rect')
-                        .attr("x", function(d,i){
-                                if(align == 'right'){
-                                        return w -barW(d.total) -30  //+ barX(data,i)
-                                } else {
-                                        return startX +30 //+ barX(data,i)
-                                }
-                        })
-                        .attr("y", function (d,i){
-                        
-                                return startY + (barH + 1) * i 
-                        })
-                        .attr("width", function(d){
-                                return barW(d.total)
-                        })
-                        .attr("height", barH)
-                        .attr('id', function(d){
-                                return 'bar-' + d.name.toLowerCase().replace(' ', '')
-                        })
-                        .attr('class', 'bar')
-                        .style('fill', function(d){
-                                
-                                if(d.contentType == 'rating'){
-                                        return '#5265AE'
-                                } else if(d.contentType == 'guns'){
-                                        return '#5E843A';
-                                } else if(d.contentType == 'violence'){
-                                        return '#CC2F27'
-                                }
-                        
-                                
-                        })
-                    .on("mouseover", function(d){
-								
-                                $('.gia-button').removeClass('gia-button-selected')
-                                $(currentSelectionBtn).text(currentSelectionText)
-                                currentSelectionText = ''
-                                currentSelectionBtn = undefined;                       
-                                showBarConnections(d);
-                                console.log(d);
-                                
-                        })
-                .on("mouseout", hideBarConnections)
-                        
-                        bars.append('text')
-                        .attr("class",'bar-label')
-                        .attr("y", function(d,i){
-                                var yPos = startY + ((barH + 1) * i) + 16 
-                                return yPos;
-                        })
-                        .attr("x", function(d,i){
-                                        if(align == 'right'){
-                                                return w - barW(d.total) -35
-                                        } else {
-                                                return barW(d.total) +35
-                                        }
-                        })
-                        .attr("text-anchor",function(d){
-                                if(align == 'right'){
-                                        return 'end'
-                                } else {
-                                        return 'start'
-                                }
+function drawSmallChart(location, data, align, height){
+    var h = height,
+        w = 200,
+        barH = 25;
 
-                        })
-                        .text(function(d) { 
-                                var text = '';
+    var startX = 0;
+    var startY = 1;
 
-                                if(d.contentType == 'rating'){
-                                        
-                                        if(d.name == 'e'){
-                                                text = 'Everyone (E)'
-                                        } else if(d.name == 'e10'){
-                                                text = 'Ages 10+ (E10)'
-                                        } else if(d.name == 't'){
-                                                text = 'Ages 13+ (T)'
-                                        } else if(d.name == 'm'){
-                                                text = 'Ages 17+ (M)'
-                                        }
-                                } else if(d.contentType == 'guns'){
-                                    if (d.name == 'Guns') {
-                                    	text = 'Male';
-                                    } else {
-                                    	text = 'Female';
-                                    }
-                                } else if(d.contentType == 'violence'){
-                                	text = d.name;
-                                }
-                                return text; 
-                        
-                        });
-                        
+    smallVis[data[0]['contentType']] = vis = d3.select("#" + location).append('svg')
+            .attr({
+                'height': h + 'px',
+                'width': w + 'px'
+            });
 
+    w = 150;
 
-                        bars.append('text')
-                        .attr("class",'bar-label-pct')
-                        .attr("y", function(d,i){
-                                var yPos = startY + ((barH + 1) * i) + 16                            
-                                return yPos;
-                        })
-                        .attr("x", function(d,i){
-                                        if(align == 'right'){
-                                                return w 
-                                        } else {
-                                                return startX
-                                        }
-                        })
-                        .attr("text-anchor",function(d){
-                                if(align == 'right'){
-                                        return 'end'
-                                } else {
-                                        return 'start'
-                                }
+    var bars = vis.selectAll(".bar")
+            .data(data)
+          .enter()
+            .append('g')
+            .attr('class', 'bar-group')
+            .attr('id', function(d){
+                    return 'bargroup-' + d.name.toLowerCase().replace(' ', '')
+            });
 
-                        })
-                        .text(function(d) { 
-                                var text = Math.round(d.total/totalChars * 100).toFixed(0) + '%'
-                                return text; 
-                        
-                        });
-                        
-                function barX (data, pos){
-                        var xPos = startX + barW(data[pos].total) + 5
-                        
-                        return xPos
+    bars.append('rect')
+        .attr("x", function(d,i){
+            if(align == 'right'){
+                return w -barW(d.total) -30  //+ barX(data,i)
+            } else {
+                return startX +30 //+ barX(data,i)
+            }
+        })
+        .attr("y", function (d,i){
+            return startY + (barH + 1) * i
+        })
+        .attr("width", function(d){
+            return barW(d.total)
+        })
+        .attr("height", barH)
+        .attr('id', function(d){
+            return 'bar-' + d.name.toLowerCase().replace(' ', '')
+        })
+        .attr('class', 'bar')
+        .style('fill', function(d){
+
+            if(d.contentType == 'status'){
+                    return '#5265AE'
+            } else if(d.contentType == 'house'){
+                    return '#5E843A';
+            } else if(d.contentType == 'death'){
+                    return '#CC2F27'
+            }
+        })
+        .on("mouseover", function(d){
+
+            $('.got-button').removeClass('got-button-selected')
+            $(currentSelectionBtn).text(currentSelectionText)
+            currentSelectionText = ''
+            currentSelectionBtn = undefined;
+            showBarConnections(d);
+            console.log(d);
+
+        })
+        .on("mouseout", hideBarConnections);
+
+    bars.append('text')
+        .attr("class",'bar-label')
+        .attr("y", function(d,i){
+            var yPos = startY + ((barH + 1) * i) + 16
+            return yPos;
+        })
+        .attr("x", function(d,i){
+            if(align == 'right'){
+                    return w - barW(d.total) -35;
+            } else {
+                    return barW(d.total) +35;
+            }
+        })
+        .attr("text-anchor",function(d){
+            if(align == 'right'){
+                return 'end';
+            } else {
+                return 'start';
+            }
+        })
+        .text(function(d) {
+            var text = '';
+
+            if(d.contentType == 'house'){
+                if (d.name == 'Male') {
+                	text = 'Male';
+                } else {
+                	text = 'Female';
                 }
+            } else if(d.contentType == 'death'){
+            	text = d.name;
+            }
+            return text;
+        });
 
-                function barW(v){
-                        return v/totalChars * w;
-                        
-                }
+    bars.append('text')
+        .attr("class",'bar-label-pct')
+        .attr("y", function(d,i){
+            var yPos = startY + ((barH + 1) * i) + 16
+            return yPos;
+        })
+        .attr("x", function(d,i){
+            if(align == 'right'){
+                    return w
+            } else {
+                    return startX
+            }
+        })
+        .attr("text-anchor",function(d){
+            if(align == 'right'){
+                    return 'end'
+            } else {
+                    return 'start'
+            }
+        })
+        .text(function(d) {
+            var text = Math.round(d.total/totalChars * 100).toFixed(0) + '%'
+            return text;
+        });
+
+    function barX (data, pos){
+        var xPos = startX + barW(data[pos].total) + 5;
+        return xPos;
+    }
+
+    function barW(v){
+        return v/totalChars * w;
+    }
 }
 
 function color(val){
@@ -536,7 +525,7 @@ function color(val){
 }
 
 function drawChart(){
-	
+
 	var barScale = d3.scale.linear()
 	    .domain([0,10])
 	    .range([0,50]);
@@ -544,121 +533,111 @@ function drawChart(){
 	var gameBarScale = d3.scale.linear()
 	    .domain([0,maxCharAppear])
 	    .range([0,10]);
-	
-	
+
 	var nodes = cluster.nodes(map)
 
 	svg.selectAll(".node-dot")
-      .data(nodes.filter(function(n) { return n.depth == 2; }))
-    .enter().append("g")
-      .attr("transform", function(d) { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; })
-    .append("rect")
-	  .attr('class', function(d){
-		return 'node-dot ' + 'nodedot-' + d.className 
-	})
-	  .attr('y', -5)
-      .attr('height', 12)
-      .attr('width', function(d){
-		if(d.nodeType == 'game'){
-			return gameBarScale(d.size)
-		} else {
-			return barScale(d.size)
-		}
-		
-		 
-	})
-	// this is the bars (text excluded)
-	  .style('fill', function(d){
-		 	return getColor(d.nodeType, d.size)
-   	   })
-	  .on("mouseover", showConnections)
-      .on("mouseout", hideConnections)
-	
-	svg.selectAll(".node")
-      .data(nodes.filter(function(n) { return n.depth == 2; }))
-    .enter().append("g")
-	  .attr("class", 'node')
-      .attr("transform", function(d) { 
-	
-		var translatevalue = d.y + 5
-		if(d.nodeType == 'game'){
-			translatevalue += gameBarScale(d.size)
-		} else {
-			translatevalue += barScale(d.size)
-		}
-		
-		return "rotate(" + (d.x - 90) + ")translate(" + translatevalue + ")"; })
-
-    .append("text")
-      .attr("dx", function(d) { return d.x < 180 ? 0 : 0; })
-      .attr("dy", "5")
-      .attr("text-anchor", function(d) { return d.x < 180 ? "start" : "end"; })
-      .attr("transform", function(d) { return d.x < 180 ? null : "rotate(180)"; })
-      .text(function(d) { return d.name; })
-      .attr("id", function(d){
-			return 'nodetext-' + d.className
-	   })
-	  .attr("class", function(d){
-			var bClass ="circle-text"
-			
-			if(d.nodeType == 'game'){
-				bClass += ' btext-' + d.weaponLink + ' btext-' + d.violenceLink + ' btext-' + d.ratingLink
-			} else if(d.nodeType == 'weapon'){
-				bClass += ' btext-' + d.weaponLink 
+	      .data(nodes.filter(function(n) { return n.depth == 2; }))
+	    .enter().append("g")
+	      .attr("transform", function(d) { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; })
+	    .append("rect")
+		  .attr('class', function(d){
+			return 'node-dot ' + 'nodedot-' + d.className})
+		  .attr('y', -5)
+	      .attr('height', 12)
+	      .attr('width', function(d){
+			if(d.nodeType == 'char'){
+				return gameBarScale(d.appear)
 			} else {
-				bClass += ' btext-' + d.violenceLink 
-			}	
+				return barScale(d.appear)
+			}})
+		  .style('fill', function(d){
+			 	return getColor(d.nodeType, d.appear)
+	   	   })
+		  .on("mouseover", showConnections)
+	      .on("mouseout", hideConnections);
 
-			return bClass;
-      })
-	  .style('fill', function(d){
-	  			if(d.nodeType == 'game'){
-					return '#394B9F';
-				} else if(d.nodeType == 'weapon' ) {
-					return '#3C602E';
-				} else if( d.nodeType == 'topic'){
-					return '#CC2F27';
+	svg.selectAll(".node")
+	      .data(nodes.filter(function(n) { return n.depth == 2; }))
+	    .enter().append("g")
+		  .attr("class", 'node')
+	      .attr("transform", function(d) {
+
+			var translatevalue = d.y + 5
+			if(d.nodeType == 'char'){
+				translatevalue += gameBarScale(d.appear)
+			} else {
+				translatevalue += barScale(d.appear)
+			}
+
+			return "rotate(" + (d.x - 90) + ")translate(" + translatevalue + ")"; })
+
+	    .append("text")
+	      .attr("dx", function(d) { return d.x < 180 ? 0 : 0; })
+	      .attr("dy", "5")
+	      .attr("text-anchor", function(d) { return d.x < 180 ? "start" : "end"; })
+	      .attr("transform", function(d) { return d.x < 180 ? null : "rotate(180)"; })
+	      .text(function(d) { return d.name; })
+	      .attr("id", function(d){
+				return 'nodetext-' + d.className;
+		   })
+		  .attr("class", function(d){
+				var bClass ="circle-text"
+
+				if(d.nodeType == 'char'){
+					bClass += ' btext-' + d.genderLink + ' btext-' + d.deathLink;
+				} else if(d.nodeType == 'house'){
+					bClass += ' btext-' + d.genderLink;
+				} else {
+					bClass += ' btext-' + d.deathLink;
 				}
-	
-	  	   })
-      .on("mouseover", showConnections)
-      .on("mouseout", hideConnections)
+
+				return bClass;
+	      })
+		  .style('fill', function(d){
+		  			if(d.nodeType == 'char'){
+						return '#394B9F';
+					} else if(d.nodeType == 'house' ) {
+						return '#3C602E';
+					} else if( d.nodeType == 'death'){
+						return '#CC2F27';
+					}
+		  	   })
+	      .on("mouseover", showConnections)
+	      .on("mouseout", hideConnections);
 
 	$('.node').mousemove(setPopupPosition);
 	$('.node-dot').mousemove(setPopupPosition);
 
-	gameWeaponsColor = d3.interpolateRgb("#ccc", '#2C3878');
+	charDeathColor = d3.interpolateRgb("#ccc", '#2C3878');
 
-
-	gameWeaponsScale = d3.scale.linear()
+	charDeathScale = d3.scale.linear()
 	    				.domain([0,maxCharDeath])
 	    				.range([0,1]);
-	
-	
-	gameTopicsColor = d3.interpolateRgb("#ccc", '#3C602E');
 
+	charHouseColor = d3.interpolateRgb("#ccc", '#3C602E');
 
-	gameTopicsScale = d3.scale.linear()
-	    				.domain([0,maxGameTopics])
+	charHouseScale = d3.scale.linear()
+	    				.domain([0,maxCharHouses])
 	    				.range([0,1]);
-		
-	var mergedLinks = gwlinks.concat(gtlinks)
-	
+
+	var mergedLinks = chardeath_links.concat(charhouse_links);
+
 	svg.selectAll(".links")
 		.data(bundle(mergedLinks))
-	.enter().append("path")
+	  .enter().append("path")
 		.attr("class", function(d){
 			var linkClass = 'links link-' + d[4]['className'] + ' link-' + d[0]['className']
-			var node = (d[4]['nodeType'] == 'game')? d[4] : d[0];
-			
-			var gLink = (d[4]['nodeType'] == 'game')? d[4] : d[0];
-			var oLink = (d[4]['nodeType'] == 'game')? d[0] : d[4];
-			
+			var node = (d[4]['nodeType'] == 'char')? d[4] : d[0];
+
+			var gLink = (d[4]['nodeType'] == 'char')? d[4] : d[0];
+			var oLink = (d[4]['nodeType'] == 'char')? d[0] : d[4];
+
 			linkClass += ' barlink-' + gLink['className'] + oLink['className']
 
-			linkClass += ' barlink-' + node['gameRating']
-			
-			return linkClass
+			linkClass += ' barlink-' + node['charStatus']
+
+			return linkClass;
 		})
 		.attr("id", function(d){
 			return 'link-' + d[4]['className'] + '-' + d[0]['className']
@@ -666,13 +645,15 @@ function drawChart(){
 		.attr("d", line)
 		.style("stroke", function(d){
 			var gradient;
-			if(d[4]['nodeType'] == 'topic' && d[0]['nodeType'] == 'game' ){
-				return 'url(#' + getGradient(d[4]['numGames'], d[0]['size'], 'topic', 'game') +')'
-			} else if(d[4]['nodeType'] == 'weapon' && d[0]['nodeType'] == 'game'){
-				return 'url(#' + getGradient(d[4]['numGames'], d[0]['size'], 'weapon', 'game') +')'
+
+			if(d[4]['nodeType'] == 'death' && d[0]['nodeType'] == 'char' ){
+				return 'url(#' + getGradient(d[4]['numChars'], d[0]['appear'], 'death', 'char') +')'
+
+			} else if(d[4]['nodeType'] == 'house' && d[0]['nodeType'] == 'char'){
+				return 'url(#' + getGradient(d[4]['numChars'], d[0]['appear'], 'house', 'char') +')'
 			}
-			
-			return'url(#' + gradient +')'
+
+			return 'url(#' + gradient +')';
 		});
 }
 
@@ -690,45 +671,42 @@ function getClassName(title){
 
 function setPopupPosition(e){
 	e = jQuery.event.fix(e);
-	mouseX = e.pageX //- $('#gia-interactive').offset().left
-	mouseY = e.pageY
-	
-	
-	if(mouseY < $('#game-network').offset().top + $('#game-network').outerHeight()/2){
-		//bottom 
-		mouseY -= $('#node-info').outerHeight() + 10
+	mouseX = e.pageX;
+	mouseY = e.pageY;
+
+	if(mouseY < $('#got-network').offset().top + $('#got-network').outerHeight()/2){
+		//bottom
+		mouseY -= $('#node-info').outerHeight() + 10;
 	} else {
-		//top 
-		 mouseY += 10	
+		//top
+		 mouseY += 10;
 	}
-	
-	
-	if(mouseX < $('#game-network').offset().left + $('#game-network').outerWidth()/2 ){
+
+	if(mouseX < $('#got-network').offset().left + $('#got-network').outerWidth()/2 ){
 		//left side
-		mouseX -= $('#node-info').outerWidth() + 10
-		
+		mouseX -= $('#node-info').outerWidth() + 10;
+
 		if(mouseX  < 0){
-			mouseX = 10
+			mouseX = 10;
 		}
-		
+
 	} else {
 		//right side
-		mouseX += 10
-		
-		if(mouseX + $("#node-info").outerWidth() > $(window).width() - 20){
-			mouseX = $(window).width() - 10 - $("#node-info").outerWidth()
-		}	
-	}
-	
-	if(e.pageY + $('#node-info').outerHeight() + 20 > $(document).height() ){
-		mouseY = e.pageY - 20 - $('#node-info').outerHeight()
-	}	
+		mouseX += 10;
 
-	$('.gia-popup').css({
+		if(mouseX + $("#node-info").outerWidth() > $(window).width() - 20){
+			mouseX = $(window).width() - 10 - $("#node-info").outerWidth();
+		}
+	}
+
+	if(e.pageY + $('#node-info').outerHeight() + 20 > $(document).height() ){
+		mouseY = e.pageY - 20 - $('#node-info').outerHeight();
+	}
+
+	$('.got-popup').css({
 		top: mouseY,
 		left: mouseX
 	})
-
 }
 
 var currentSelection = undefined;
@@ -739,33 +717,32 @@ function showBarConnections(d) {
 	if(currentSelection){
 		hideBarConnections(currentSelection )
 	}
-	
+
 	currentSelection = d;
-	$(currentSelectionBtn).addClass('gia-button-selected')
+	$(currentSelectionBtn).addClass('got-button-selected')
 	$(currentSelectionBtn).text('Show all characters')
 
 	for(var s in smallVis){
 		smallVis[s].selectAll('.bar')
 			.style('fill', '#eee')
 	}
-	
+
 	smallVis[d['contentType']].select('#bar-' + d.name.toLowerCase().replace(' ', ''))
 		.style('fill', function(d){
-			if(d.contentType == 'rating'){
+			if(d.contentType == 'status'){
 				return '#5265AE';
-			} else if(d.contentType == 'guns'){
+			} else if(d.contentType == 'house'){
 				return '#5E843A';
-			} else if(d.contentType == 'violence'){
+			} else if(d.contentType == 'death'){
 				return '#CC2F27';
 			}
-			
 		})
 
 	svg.selectAll('.circle-text')
-		.classed('circle-text-dim', true);	
+		.classed('circle-text-dim', true);
 	svg.selectAll('path.links')
 		.style("stroke-opacity", .01)
-	
+
 	if (d.name == 'Deceased') {
 		svg.selectAll('.btext-violence')
 			.classed('highlight', true)
@@ -774,15 +751,15 @@ function showBarConnections(d) {
 		svg.selectAll('.btext-' + d.name.toLowerCase().replace(' ', ''))
 			.classed('highlight', true)
 			.classed('circle-text-dim', false);
-		if (d.contentType != 'violence') {
-			if (d.name == 'Guns') {
+		if (d.contentType != 'death') {
+			if (d.name == 'Male') {
 			var hArray = ['stark', 'tyrell', 'freefolk'];
 			hArray.forEach(function (h) {
 				svg.selectAll('#nodetext-' + h)
 					.classed('highlight', true)
 					.classed('circle-text-dim', false);
 			});
-			} else if (d.name = 'No guns') {
+			} else if (d.name = 'Female') {
 				var hArray = ['baratheon', 'lannister', 'kingsguard', 'targaryen', 'freefolk', 'self', 'baelish'];
 				hArray.forEach(function (h) {
 					svg.selectAll('#nodetext-' + h)
@@ -792,49 +769,46 @@ function showBarConnections(d) {
 			}
 		}
 	}
-	
+
 	svg.selectAll('.node-dot')
-		.style('opacity', .01)
-	
-	
+		.style('opacity', .01);
+
 	d.data.forEach(function(game){
 		svg.select('#nodetext-' + game.className)
 			.classed('highlight', true)
 			.classed('circle-text-dim', false);
-			
+
 			svg.select('.nodedot-' + game.className)
 				.style('opacity', 1)
-			
-			if(d.contentType == 'guns' ){
-				var wArray = game.weaponConnections[ d.name.toLowerCase().replace(' ', '') ]		
+
+			if(d.contentType == 'house' ){
+				var wArray = game.houseConnections[ d.name.toLowerCase().replace(' ', '') ]
 				wArray.forEach(function(node){
 					svg.select('.nodedot-' + node['className'])
 						.style('opacity', 1)
-					
+
 					svg.select('.barlink-' + game.className + node['className'])
 						.style("stroke-opacity", 1)
 				})
-			} else if( d.contentType == 'violence'){
+			} else if( d.contentType == 'death'){
 
-				var tArray = game.topicConnections[ d.name.toLowerCase().replace(' ', '') ]
+				var tArray = game.deathConnections[ d.name.toLowerCase().replace(' ', '') ]
 
 				tArray.forEach(function(node){
-					
+
 					svg.select('.nodedot-' +node['className'])
 						.style('opacity', 1)
-					
+
 					svg.select('.barlink-' + game.className + node['className'])
 						.style("stroke-opacity", 1)
-
-					console.log(game.className);
 				})
 			}  else {
-				
+
 				game.connectedNodes.forEach(function(node){
-					
+
 					svg.select('.nodedot-' +node)
 						.style('opacity', 1)
-					
+
 					svg.select('#nodetext-' + node)
 						.classed('highlight', true)
 						.classed('circle-text-dim', false);
@@ -845,59 +819,59 @@ function showBarConnections(d) {
 }
 
 function hideBarConnections(d) {
-	$('.gia-button').removeClass('gia-button-selected')
+	$('.got-button').removeClass('got-button-selected')
 	$(currentSelectionBtn).text(currentSelectionText)
-	
+
 	for(var s in smallVis){
-		
+
 		smallVis[s].selectAll('.bar')
 			.style('fill', function(d){
-				if(d.contentType == 'rating'){
+				if(d.contentType == 'status'){
 					return '#5265AE'
-				} else if(d.contentType == 'guns'){
+				} else if(d.contentType == 'house'){
 					return '#5E843A';
-				} else if(d.contentType == 'violence'){
+				} else if(d.contentType == 'death'){
 					return '#CC2F27';
 				}
-				
+
 			})
 	}
-	
+
 	svg.selectAll('.node-dot')
 		.style('opacity', 1)
-	
+
 	smallVis[d['contentType']].select('#bar-' + d.name.toLowerCase().replace(' ', ''))
 		.classed('bar-highlight', false)
-		
+
 	svg.selectAll('.circle-text')
 		.classed('highlight', false)
 		.classed('circle-text-dim', false);
 	svg.selectAll('path.links')
 		.style("stroke-opacity", 1)
-	
+
 	currentSelection = undefined;
 	currentSelectionBar = undefined;
-	currentSelection = ''
+	currentSelection = '';
 }
 
 function showConnections(d) {
 
 	svg.selectAll('.circle-text')
 		.classed('circle-text-dim', true);
-		
+
 	svg.select('#nodetext-' + d.className)
 		.classed('highlight', true)
 		.classed('circle-text-dim', false);
-	
+
 	svg.selectAll('.node-dot')
 		.style("opacity", .01)
-	
+
 	svg.selectAll('path.links')
 		.style("stroke-opacity", .01)
-	
+
 	svg.selectAll('path.link-' + d.className)
 		.style("stroke-opacity",1)
-		
+
 	svg.selectAll('.nodedot-' + d.className)
 		.style("opacity",1)
 
@@ -905,114 +879,96 @@ function showConnections(d) {
 		svg.select('#nodetext-' + n)
 			.classed('highlight', true)
 			.classed('circle-text-dim', false);
-			
-		svg.selectAll('.nodedot-' + n)
-			.style("opacity", 1)	
-	})
-	
-	$("#node-info").empty()
 
-	if(d.nodeType == 'game'){
-		$("#gameTemplate").tmpl( {
+		svg.selectAll('.nodedot-' + n)
+			.style("opacity", 1)
+	})
+
+	$("#node-info").empty();
+
+	if(d.nodeType == 'char'){
+		$("#charTemplate").tmpl( {
 			name: d.name,
-			color: getratingColor(d.gameRating),
+			color: getStatusColor(d.charStatus),
 			imagesrc: d.image,
-			//image: d.image,
-			//color: getColor(d.nodeType, d.size),
-			episodes: d.size,
-			rating: d.gameRating,
+			episodes: d.appear,
+			status: d.charStatus,
 			season: d.seasons,
 			religion: d.religion,
 			culture: d.culture,
 			portrayed: d.portrayed
 		}).appendTo( "#node-info" );
-		//console.log(d.image);
+
 		var weapons = (d.weapons.length > 0)? d.weapons: ['None'];
 		$.each(weapons, function(i, w){
-			$("#listTemplate").tmpl( {item: w}).appendTo( "#node-weapon-references .node-data" );
+			$("#listTemplate").tmpl( {item: w}).appendTo( "#node-death-references .node-data" );
 		})
-		
-		var topics = (d.topics.length > 0)? d.topics: ['N/A'];
-		$.each(topics, function(i, t){
-			$("#listTemplate").tmpl( {item: t}).appendTo( "#node-topic-references .node-data" );
+
+		var houses = (d.houses.length > 0)? d.houses: ['N/A'];
+		$.each(houses, function(i, t){
+			$("#listTemplate").tmpl( {item: t}).appendTo( "#node-house-references .node-data" );
 		})
 
 		var seasons = (d.seasons.length > 0)? d.seasons: ['None'];
 		$.each(seasons, function(i, s){
 			$("#listTemplate").tmpl( {item: s}).appendTo( "#node-season-references .node-data" );
 		})
-	} else if(d.nodeType == 'weapon' ){
+	} else if(d.nodeType == 'house' ){
 		$("#allegianceTemplate").tmpl( {
 			name: d.name,
-			color: getColor(d.nodeType, d.size),
-			count: addCommas(d.numGames)			
-		}).appendTo( "#node-info" );		
-	} else if( d.nodeType == 'topic'){
+			color: getColor(d.nodeType, d.appear),
+			count: d.numChars
+		}).appendTo( "#node-info" );
+	} else if( d.nodeType == 'death'){
 		$("#deathTemplate").tmpl( {
 			//name: (d.name.toLowerCase().search('use') >= 0)? 'the ' + d.name.toLowerCase() : d.name.toLowerCase(),
 			name: (d.name.toLowerCase() == 'other')? 'wild board attack, throat slit or burned ' : d.name.toLowerCase(),
-			color: getColor(d.nodeType, d.size),
-			count: (d.numGames > 1) ? addCommas(d.numGames)	+ ' major characters are': addCommas(d.numGames)	+ ' major character is' 	
-		}).appendTo( "#node-info" );		
+			color: getColor(d.nodeType, d.appear),
+			count: (d.numChars > 1) ? d.numChars	+ ' major characters are': d.numChars	+ ' major character is'
+		}).appendTo( "#node-info" );
 	}
-	$("#node-info").show()
-	
-}
-
-function getRating(rating){
-		var text = 'None'
-		if(rating == 'e'){
-			text = 'E (everyone)'
-		} else if(rating == 'e10'){
-			text = 'E10 (ages 10+)'
-		} else if(rating == 't'){
-			text = 'T (ages 13+)'
-		} else if(rating == 'm'){
-			text = 'M (ages 17+)'
-		}
-		return text;
+	$("#node-info").show();
 }
 
 function hideConnections(d) {
 	$("#node-info").hide()
 	svg.selectAll('path.links')
 		.style("stroke-opacity", 1);
-		
+
 	svg.selectAll('.circle-text')
 		.classed('circle-text-dim', false)
 		.classed('highlight', false);
-		
+
 	svg.selectAll('.node-dot')
 		.style("opacity", 1)
-		
+
 	if(currentSelection){
 		showBarConnections(currentSelection )
-	}	
+	}
 }
 
-
-function getGradient(startValue, endValue, topic1, topic2){
+function getGradient(startValue, endValue, node1, node2){
 
 	var gradientId = "gradient" + gradientCounter;
 
 	var gradient = svgDefs.append("svg:linearGradient")
-		.attr("id", gradientId)
-		//.attr("spreadMethod", "pad");
-	
+		.attr("id", gradientId);
+
 	gradient.append("svg:stop")
 	    .attr("offset", "10%")
-	    .attr("stop-color", getColor( topic1,startValue))
+	    .attr("stop-color", getColor( node1,startValue))
 
 	gradient.append("svg:stop")
 	    .attr("offset", "90%")
-	    .attr("stop-color", getColor(topic2, endValue))
+	    .attr("stop-color", getColor(node2, endValue))
 
 	gradientCounter++;
+
 	return gradientId;
 }
 
-function getratingColor(rating){
-	if (rating == 'Alive') {
+function getStatusColor(status){
+	if (status == 'Alive') {
 		color = '#7EFF2B';
 	} else {
 		color = '#00302B';
@@ -1020,10 +976,9 @@ function getratingColor(rating){
 	return color;
 }
 
-function getColor(topic, value){
+function getColor(type, value){
 	var color = '#ccc'
-	if(topic == 'game'){
-		//color = '#D7DEF7';
+	if(type == 'char'){
 		if( value <= 10){
 			color = '#8B9BD9'
 		} else if( value > 10 && value <= 15){
@@ -1035,8 +990,7 @@ function getColor(topic, value){
 		} else if( value > 35 ){
 			color = '#162252'
 		}
-	
-	}else if(topic == 'weapon'){
+	} else if(type == 'house'){
 		if( value <= 1){
 			color = '#9DB270';
 		} else if( value > 1 && value <= 5){
@@ -1048,7 +1002,7 @@ function getColor(topic, value){
 		} else if( value > 15 ){
 			color = '#2F4F2F';
 		}
-	} else if(topic == 'topic'){
+	} else if(type == 'death'){
 		if( value <= 1){
 			color = '#E88B78';
 		} else if( value == 2){
@@ -1057,28 +1011,5 @@ function getColor(topic, value){
 			color = '#871D1B';
 		}
 	}
-	return color;	
+	return color;
 }
-
-function roundSales (n){
-	var newN = n/100000;
-	newN = Math.round(newN)/10
-	
-	
-	return newN.toFixed(1) + ' m';
-}
-
-function addCommas(nStr)
-{
-	nStr += '';
-	x = nStr.split('.');
-	x1 = x[0];
-	x2 = x.length > 1 ? '.' + x[1] : '';
-	var rgx = /(\d+)(\d{3})/;
-	while (rgx.test(x1)) {
-		x1 = x1.replace(rgx, '$1' + ',' + '$2');
-	}
-	return x1 + x2;
-}
-
-
